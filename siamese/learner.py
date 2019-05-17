@@ -1,9 +1,10 @@
 from fastai.basics import *
 from fastai.vision import models
-from torch import nn
+from torch.nn import Module
 from copy import deepcopy
 
-class SiameseNetwork(nn.Module):
+
+class SiameseNetwork(Module):
 
     def __init__(self, encoder=models.resnet18, s_out=512):
         # TODO warn is s_out is to large
@@ -28,6 +29,13 @@ def hinge_loss(x, y, m=1):
     return diff
 
 
+def contrassive_loss(x, y, m):
+    euc = F.pairwise_distance(x[0], x[1])
+    cont_loss = (1-y) * torch.pow(euc, 2)
+    cont_loss += (y) * torch.pow(torch.clamp(m - euc, min=0.0), 2)
+    return cont_loss
+
+
 def gen_loss_m(loss_func):
     return lambda x, y: loss_func(x, y).mean()
 
@@ -40,7 +48,7 @@ def create_loss_acc(loss_func, l):
     return gen_loss_m(loss_func), loss_acc(loss_func, l)
 
 
-def siamese_learner(data: DataBunch, encoder: nn.Module = models.resnet18, s_out=512, loss_func=None, loss_size=None, m=3):
+def siamese_learner(data: DataBunch, encoder: Module = models.resnet18, s_out=512, loss_func=None, loss_size=None, m=3):
     if loss_func is None:
         loss_func = partial(hinge_loss, m=m)
     # m/2 is the middle of confidence so if we're bellow it that means we've guessed correctly
