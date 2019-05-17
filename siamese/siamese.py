@@ -1,4 +1,4 @@
-from fastai.basics import *
+from fastai.basics import ItemBase, ItemList, LabelList, CategoryList
 from copy import deepcopy
 
 
