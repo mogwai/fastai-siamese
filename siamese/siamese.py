@@ -29,23 +29,26 @@ class ItemTuple(ItemBase):
         return self.size
 
 
-
 def _make_ll(ll: LabelList, pct_same=.5, tar_num=None, **kwargs):
     x = ll.x
     y = ll.y
-    seperated = [x.items[y.items == i] for i in range(ll.c)]
-    pairs = gen_pairs(seperated, pct_same, tar_num)
+    seperated = [x.items[y.items == i] for i in np.unique(y.items)]
+    l = len(x.items)
+    total = (l*(l+1))/2
+    pairs = compute_pairs(seperated, seperated, pct_same, tar_num/total)
     # Keeping in sorted form
+    print(len(pairs))
     ll.x.items = np.concatenate(seperated)
     ll.y.items = np.concatenate(
-        [y.items[y.items == i] for i in range(ll.c)])
+        [y.items[y.items == i] for i in np.unique(y.items)])
     ret = SiameseDataset(ll.x, ll.y, **kwargs)
     ret.pairs = pairs
     ret.lens = [len(i) for i in seperated]
     return ret
 
+
 class SiameseDataset(LabelList):
-    
+
     @classmethod
     def create_from_ll(cls, ll: LabelList, pct_same=0.5, tar_num=None, split_c=None, split_pct=.2, **kwargs):
         if tar_num is None:
@@ -53,7 +56,7 @@ class SiameseDataset(LabelList):
 
         if isinstance(split_c, float):
             split_c = list(range(int(ll.c*split_c)))
-        
+
         mask = None
         for i in split_c:
             if mask is None:
@@ -65,8 +68,10 @@ class SiameseDataset(LabelList):
         tll.y.items = tll.y.items[~mask]
         vll.x.items = vll.x.items[mask]
         vll.y.items = vll.y.items[mask]
-        train = _make_ll(tll, pct_same=pct_same, tar_num=tar_num*(1-split_pct), **kwargs)
-        valid = _make_ll(vll, pct_same=pct_same, tar_num=tar_num*split_pct, **kwargs)
+        train = _make_ll(tll, pct_same=pct_same,
+                         tar_num=tar_num*(1-split_pct), **kwargs)
+        valid = _make_ll(vll, pct_same=pct_same,
+                         tar_num=tar_num*split_pct, **kwargs)
         return LabelLists(ll.path, train, valid)
 
     def _same(self, items):
@@ -104,23 +109,36 @@ class SiameseDataset(LabelList):
         x = ItemTuple(items)
         return x, y
 
+# Total target is the percentage of getting any of the items num of items desired / total items
+# pct_same is the number of same pairs to be generated implying
+# the number of different pairs to be 1 - pct_same
 
-def gen_pairs(classes_arr, pct_same, total_pairs):
-    """
-    Creates a matrix of possible unique pairs and applies probabilities
-    based on target total of items required.
-    TODO Guaruntee one combination of each class
-    TODO Add custom pairs to generated pairs
-    """
-    Sn = sum([len(I) for I in classes_arr])
-    add_chance = 2*total_pairs / (Sn*(Sn+1)/2)
-    s = Sn, Sn
-    print(s)
-    M = torch.rand(s).tril.t() < (1-pct_same) * add_chance
-    i = 0
-    for I in classes_arr:
-        l = len(I)
-        R[i: i+l, i: i+l] = torch.rand() < pct_same * add_chance
-        i += l
 
-    return (M*R).nonzero()
+def compute_pairs(A, B, perc=None, total_target=None, pct_same=.2):
+    try:
+        if not isinstance(A[0], (np.ndarray, list)):
+            return gen_pairs(A, B, perc)
+    except Exception as e:
+        return gen_pairs(A, B, perc)
+
+    pairs = torch.empty(0, 2, dtype=torch.long)
+    down = 0
+    right = 0
+
+    for i in range(len(A)):
+        for j in range(i+1):
+            if total_target is not None:
+                perc = pct_same if i == j else 1-pct_same
+                perc *= total_target
+            shift = torch.tensor([right, down])
+            n = compute_pairs(A[i], B[j], perc, None) + shift
+            pairs = torch.cat((pairs, n))
+            down += len(B[j])
+        right += len(A[i])
+
+    return pairs
+
+
+def gen_pairs(A, B, perc):
+    M = torch.rand(len(A), len(B)) < 2*perc
+    return M.tril().t().nonzero()
