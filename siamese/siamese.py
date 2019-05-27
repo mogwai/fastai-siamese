@@ -55,7 +55,7 @@ class SiameseDataset(LabelList):
         
         if isinstance(split_c, float):
             split_c = list(range(int(ll.c*split_c)))
-
+        
         mask = None
         for i in split_c:
             if mask is None:

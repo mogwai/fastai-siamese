@@ -43,6 +43,7 @@ def gen_loss_m(loss_func):
 def loss_acc(loss_func, l):
     return lambda x, y: (loss_func(x, y) < l**2).float().mean()
 
+
 def create_loss_acc(loss_func, l):
     return gen_loss_m(loss_func), loss_acc(loss_func, l)
 
