@@ -20,5 +20,5 @@ config.top_db = 80
 config.max_to_pad = 1000
 # config.silence_padding = 300
 audios = AudioList.from_folder(data_folder, config=config).split_none().label_from_re(label_pattern)
-sds = SiameseDataset.create_from_ll(audios, split_c=.2, tar_num=1000)
-ex = sds.train[0]
+sds = SiameseDataset.create_from_ll(audios, split_pct=.2, tar_num=1000).databunch(bs=64)
+siamese_learner(sds).fit(1)

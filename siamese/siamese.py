@@ -13,14 +13,16 @@ class ItemTuple(ItemBase):
         self.data = torch.cat([x.data.unsqueeze(0) for x in items])
 
     def show(self):
-        print(
-            f"ItemTuple<{self.items[0].__class__.__name__}>[{len(self.items)}]")
+        print(str(self))
         [x.show() for x in self.items]
 
     def apply_tfms(self, tfms):
         for tfm in tfms:
             self.data = torch.stack([tfm(x) for x in self.data])
         return self
+
+    def __str__(self):
+        return f"ItemTuple<{self.items[0].__class__.__name__}>[{len(self.items)}]"
 
     def __repr__(self):
         return ''.join([str(x)+'\n' for x in self.items])
@@ -36,11 +38,8 @@ def _make_ll(ll: LabelList, pct_same=.5, tar_num=None, **kwargs):
     l = len(x.items)
     total = (l*(l+1))/2
     pairs = compute_pairs(seperated, seperated, pct_same, tar_num/total)
-    # Keeping in sorted form
-    print(len(pairs))
     ll.x.items = np.concatenate(seperated)
-    ll.y.items = np.concatenate(
-        [y.items[y.items == i] for i in np.unique(y.items)])
+    ll.y.items = np.concatenate([y.items[y.items == i] for i in np.unique(y.items)])
     ret = SiameseDataset(ll.x, ll.y, **kwargs)
     ret.pairs = pairs
     ret.lens = [len(i) for i in seperated]
@@ -50,10 +49,10 @@ def _make_ll(ll: LabelList, pct_same=.5, tar_num=None, **kwargs):
 class SiameseDataset(LabelList):
 
     @classmethod
-    def create_from_ll(cls, ll: LabelList, pct_same=0.5, tar_num=None, split_c=None, split_pct=.2, **kwargs):
+    def create_from_ll(cls, ll: LabelList, pct_same=0.5, tar_num=None, split_c=.2, split_pct=.2, **kwargs):
         if tar_num is None:
             tar_num = len(ll.x.items)
-
+        
         if isinstance(split_c, float):
             split_c = list(range(int(ll.c*split_c)))
 
@@ -63,6 +62,7 @@ class SiameseDataset(LabelList):
                 mask = ll.y.items == i
             else:
                 mask = np.logical_or(mask, ll.y.items == i)
+        
         tll, vll = deepcopy(ll), deepcopy(ll)
         tll.x.items = tll.x.items[~mask]
         tll.y.items = tll.y.items[~mask]
@@ -86,6 +86,7 @@ class SiameseDataset(LabelList):
     def _get_class(self, idx):
         total = 0
         for i, l in enumerate(self.lens):
+            # print(i,l)
             total += l
             if idx < total+l:
                 return i
@@ -94,20 +95,16 @@ class SiameseDataset(LabelList):
         return len(self.pairs)
 
     def totuple(self, i):
-        x = self.pairs[idxs]
-        items = [self.x[i] for i in x]
+        x = self.pairs[i]
+        items = [self.x[j] for j in x]
         y = 0 if self._same(x) else 1
         x = ItemTuple(items)
         return x, y
 
     def __getitem__(self, idxs):
         if not isinstance(idxs, int):
-            print("HELP!")
-        x = self.pairs[idxs]
-        items = [self.x[i] for i in x]
-        y = 0 if self._same(x) else 1
-        x = ItemTuple(items)
-        return x, y
+            raise Exception("HELP!")
+        return self.totuple(idxs)
 
 # Total target is the percentage of getting any of the items num of items desired / total items
 # pct_same is the number of same pairs to be generated implying
@@ -122,10 +119,10 @@ def compute_pairs(A, B, perc=None, total_target=None, pct_same=.2):
         return gen_pairs(A, B, perc)
 
     pairs = torch.empty(0, 2, dtype=torch.long)
-    down = 0
     right = 0
 
     for i in range(len(A)):
+        down = 0
         for j in range(i+1):
             if total_target is not None:
                 perc = pct_same if i == j else 1-pct_same
@@ -135,10 +132,11 @@ def compute_pairs(A, B, perc=None, total_target=None, pct_same=.2):
             pairs = torch.cat((pairs, n))
             down += len(B[j])
         right += len(A[i])
-
+        
     return pairs
 
 
 def gen_pairs(A, B, perc):
-    M = torch.rand(len(A), len(B)) < 2*perc
+    # Magic number her to bump up the number to the target
+    M = torch.rand(len(A), len(B)) < 3*perc
     return M.tril().t().nonzero()

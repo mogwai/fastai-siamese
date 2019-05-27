@@ -1,5 +1,5 @@
 from fastai.basics import *
-from fastai.vision import models
+from fastai.vision import models, create_body, create_head
 from torch.nn import Module
 from copy import deepcopy
 
@@ -42,7 +42,6 @@ def gen_loss_m(loss_func):
 
 def loss_acc(loss_func, l):
     return lambda x, y: (loss_func(x, y) < l**2).float().mean()
-
 
 def create_loss_acc(loss_func, l):
     return gen_loss_m(loss_func), loss_acc(loss_func, l)
